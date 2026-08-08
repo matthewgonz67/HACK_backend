@@ -6,8 +6,8 @@ import './App.css'
 const PICO_IP = '192.168.0.123'
 
 function App() {
-  const [pinStatus, setPinStatus] = useState('unknown')
   const wsRef = useRef(null)
+  const [volume, setVolume] = useState("0")
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -22,8 +22,8 @@ function App() {
       console.log('Message from server:', event.data)
       try {
         const data = JSON.parse(event.data)
-        if (data.status === 'on' || data.status === 'off') {
-          setPinStatus(data.status)
+        if (typeof data.volume === "number") {
+          //setVolume(data.status)
         }
       } catch (e) {
         console.error('Error parsing message:', e)
@@ -47,9 +47,10 @@ function App() {
   }, [])
 
   // Send a GPIO toggle command to the Pico
-  const handleToggleGPIO = () => {
+  const sendVolume = (newVolume) => {
+    setVolume(newVolume)
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ action: 'toggle' }))
+      wsRef.current.send(JSON.stringify({ volume: Number(newVolume) }))
     } else {
       console.error('WebSocket is not open')
     }
@@ -121,10 +122,8 @@ function App() {
 
       <div className="gpio-control">
         <h1 className="gpio-heading">Pico Control</h1>
-        <button className="gpio-button" onClick={handleToggleGPIO}>
-          Toggle GPIO 16
-        </button>
-        <p className="gpio-status">Pin status: {pinStatus}</p>
+        <input type="range" min="0" max="100" value={volume} onChange={(e) => sendVolume(e.target.value)} />
+        <p className="gpio-status">Volume: {volume}</p>
       </div>
     </div>
   )

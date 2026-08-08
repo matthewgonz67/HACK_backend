@@ -20,9 +20,10 @@ WIRING:
 """
  
 import network
+import asyncio
 import time
 import json
-from machine import Pin
+from machine import Pin, PWM, ADC
 from microdot import Microdot
 from microdot.websocket import with_websocket
  
@@ -31,12 +32,23 @@ WIFI_SSID = "HAcK-Project-WiFi"
 WIFI_PASSWORD = "UCLA.HAcK.2026.Summer"
 GPIO_PIN = 16
 # --------------------------------
- 
-led_pin = Pin(GPIO_PIN, Pin.OUT)
-led_pin.value(0)  # start OFF
+
+mic = ADC(26)
+led_pwm = PWM(Pin(16))
+led_pwm.duty_u16(0)  # start OFF
+led_pwm.freq(1000)
  
 app = Microdot()
- 
+
+current_volume = 0
+sound_open = False
+
+def apply_output():
+    if sound_open:
+        duty = int((current_volume / 100) * 65535)
+    else:
+        duty = 0
+    led_pwm.duty_u16(duty)
  
 def connect_wifi():
     wlan = network.WLAN(network.STA_IF)
@@ -57,11 +69,29 @@ def connect_wifi():
     else:
         print("\nFailed to connect to WiFi")
         return None
- 
+
+def is_sound_detected(window_ms=50, threshold=60000):
+    samples = []
+    t_end = time.ticks_add(time.ticks_ms(), window_ms)
+    while time.ticks_diff(t_end, time.ticks_ms()) > 0:
+        samples.append(mic.read_u16())
+    print(max(samples) - min(samples))
+    return (max(samples) - min(samples)) > threshold
+
+async def check_for_sound():
+    global sound_open
+    while True:
+        detected = is_sound_detected()
+        if detected != sound_open:
+            sound_open = detected
+            print("Sound gate:", "OPEN" if sound_open else "CLOSED")
+            apply_output()
+        await asyncio.sleep_ms(20)
  
 @app.route('/ws')
 @with_websocket
 async def websocket_handler(request, ws):
+    global current_volume
     print("Client connected")
     while True:
         message = await ws.receive()
@@ -69,36 +99,34 @@ async def websocket_handler(request, ws):
  
         try:
             data = json.loads(message)
-            action = data.get("action")
+            volume = data.get("volume")
         except ValueError:
             # If it's not JSON, treat the raw text as the action
-            action = message
- 
-        if action == "on":
-            led_pin.value(1)
-            status = "on"
-        elif action == "off":
-            led_pin.value(0)
-            status = "off"
-        elif action == "toggle":
-            led_pin.value(not led_pin.value())
-            status = "on" if led_pin.value() else "off"
-        else:
-            status = "unknown_command"
+            volume = None
+
+        volume = int(volume)
+        current_volume = max(0, min(100, volume))
+        apply_output()
  
         response = {
-            "status": status,
             "pin": GPIO_PIN,
             "original_message": message,
         }
         await ws.send(json.dumps(response))
  
  
-if __name__ == "__main__":
+async def main():
     ip_address = connect_wifi()
     if ip_address:
         print(f"WebSocket server starting at ws://{ip_address}:8765/ws")
-        app.run(port=8765)
+        asyncio.create_task(check_for_sound())
+        await app.start_server(port=8765)
     else:
         print("Cannot start server without WiFi connection")
- 
+
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Interrupted")

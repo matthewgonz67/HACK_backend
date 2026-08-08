@@ -1,16 +1,18 @@
 import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
+// Replace with your Pico 2 W's IP address (printed to the serial console
+// when it connects to WiFi, e.g. "192.168.1.42")
+const PICO_IP = '192.168.0.123'
+
 function App() {
-  const [count, setCount] = useState(0)
-  const [message, setMessage] = useState('')
-  const [chatLogs, setChatLogs] = useState([])
+  const [pinStatus, setPinStatus] = useState('unknown')
   const wsRef = useRef(null)
 
   // Initialize WebSocket connection
   useEffect(() => {
-    // Connect to WebSocket server
-    wsRef.current = new WebSocket('ws://localhost:8765')
+    // Connect to WebSocket server running on the Pico
+    wsRef.current = new WebSocket(`ws://${PICO_IP}:8765/ws`)
 
     wsRef.current.onopen = () => {
       console.log('Connected to WebSocket server')
@@ -20,11 +22,9 @@ function App() {
       console.log('Message from server:', event.data)
       try {
         const data = JSON.parse(event.data)
-        setChatLogs(prev => [...prev, {
-          message: data.original_message,
-          timestamp: data.timestamp,
-          type: 'received'
-        }])
+        if (data.status === 'on' || data.status === 'off') {
+          setPinStatus(data.status)
+        }
       } catch (e) {
         console.error('Error parsing message:', e)
       }
@@ -46,71 +46,87 @@ function App() {
     }
   }, [])
 
-  // Send message on Enter key
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && message.trim() && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(message)
-
-      setMessage('')
+  // Send a GPIO toggle command to the Pico
+  const handleToggleGPIO = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'toggle' }))
+    } else {
+      console.error('WebSocket is not open')
     }
   }
 
   return (
-    <>
-      <section id="center">
-
-        {/* WebSocket Message Input */}
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Type message and press Enter to send"
-          style={{
-            marginTop: '20px',
-            padding: '10px',
-            borderRadius: '4px',
-            border: '1px solid #ccc',
-            width: '300px',
-            fontSize: '16px'
-          }}
-        />
-
-        {/* Chat Logs Display */}
-        <div style={{
-          marginTop: '30px',
-          padding: '15px',
-          border: '1px solid #ddd',
-          borderRadius: '4px',
-          width: '350px',
-          maxHeight: '400px',
-          overflowY: 'auto',
-          backgroundColor: '#f9f9f9'
-        }}>
-          <h3 style={{ marginTop: 0 }}>Chat Logs</h3>
-          {chatLogs.length === 0 ? (
-            <p style={{ color: '#999' }}>No messages yet</p>
-          ) : (
-            chatLogs.map((log, index) => (
-              <div key={index} style={{
-                marginBottom: '10px',
-                padding: '8px',
-                backgroundColor: '#f0f0f0',
-                borderRadius: '3px',
-                borderLeft: `3px solid #666`
-              }}>
-                <div style={{ fontSize: '12px', color: '#666' }}>
-                  {log.timestamp}
-                </div>
-                <div style={{ fontSize: '14px', marginTop: '4px' }}>
-                  {log.message}
-                </div>
-              </div>
-            ))
-          )}
+    <div className = "Webpage">
+      <div className = "Intro">
+          <h1 className = "Heading">
+            Meet the masterminds behind
+          </h1>
+          <div className = "image-intro-container">
+            <img src = "/team_logo.png" alt ="Team Logo" className="intro-pictures"></img>
+            <img src = "/team_picture.jpg" alt ="Team Picture" className="intro-pictures"></img>
+          </div>
+        <div className = "intro-container">
+          <div className = "intro-entry">
+            <img src = "/name_pic.png" alt = "Name Picture" className="personal-pictures"></img>
+            <h3>Matthew Gonzalez</h3>
+            <p>Introduction</p>
+          </div>
+          <div className = "intro-entry">
+            <img src = "/name_pic.png" alt = "Name Picture" className="personal-pictures"></img>
+            <h3>Andy Viche</h3>
+            <p>Introduction</p>
+          </div>
+          <div className = "intro-entry">
+            <img src = "/name_pic.png" alt = "Name Picture" className="personal-pictures"></img>
+            <h3>Teppei Yoshikawa</h3>
+            <p>Introduction</p>
+          </div>
+          <div className = "intro-entry">
+            <img src = "/name_pic.png" alt = "Name Picture" className="personal-pictures"></img>
+            <h3>Sean Stokowski</h3>
+            <p>Introduction</p>
+          </div>
         </div>
-      </section>
-    </>
+      </div>
+      <h1 className = "video-heading">Demonstration Videos</h1>
+      <div className="video-row">
+        <div className="video-container">
+          <iframe
+            src="https://www.youtube.com/embed/VIDEO_ID_1"
+            title="Video 1"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          ></iframe>
+        </div>
+        <div className="video-container">
+          <iframe
+            src="https://www.youtube.com/embed/VIDEO_ID_2"
+            title="Video 2"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          ></iframe>
+        </div>
+        <div className="video-container">
+          <iframe
+            src="https://www.youtube.com/embed/VIDEO_ID_3"
+            title="Video 3"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          ></iframe>
+        </div>
+      </div>
+
+      <div className="gpio-control">
+        <h1 className="gpio-heading">Pico Control</h1>
+        <button className="gpio-button" onClick={handleToggleGPIO}>
+          Toggle GPIO 16
+        </button>
+        <p className="gpio-status">Pin status: {pinStatus}</p>
+      </div>
+    </div>
   )
 }
 

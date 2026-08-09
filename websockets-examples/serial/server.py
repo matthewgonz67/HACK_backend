@@ -54,7 +54,8 @@ CMD_SET_VOLUME = 3
  
 INSTRUMENT_NAMES = ("Trumpet", "Oboe", "Flute")
  
-uart = UART(UART_ID, baudrate=UART_BAUD, tx=Pin(UART_TX), rx=Pin(UART_RX))
+uart_sound = UART(UART_ID, baudrate=UART_BAUD, tx=Pin(UART_TX), rx=Pin(UART_RX))
+uart_sensors = UART(1, baudrate=115200, tx=Pin(20), rx=Pin(21))
  
 mic = ADC(MIC_PIN)
 led_pwm = PWM(Pin(LED_PIN))
@@ -67,6 +68,8 @@ current_volume = 0
 current_instrument = 0
 sound_open = False
 realism_enabled = True
+last_note = None
+connected_clients = set()
  
  
 # =========================================================
@@ -76,7 +79,7 @@ realism_enabled = True
 def send_command(cmd, value):
     """Send one 2-byte frame. The sound board reads exactly two bytes."""
     value = max(0, min(255, int(value)))
-    uart.write(bytes([cmd, value]))
+    uart_sound.write(bytes([cmd, value]))
     print("UART ->", cmd, value)
  
  
@@ -110,7 +113,7 @@ def set_instrument(index):
         send_command(CMD_SELECT_INSTRUMENT, index)
         return True
     return False
- 
+
  
 def play_note(midi_note):
     """
@@ -130,8 +133,22 @@ def change_realism(realism):
     realism_enabled = bool(realism)
     print("Realism:", "ON" if realism_enabled else "OFF")
     push_volume_to_audio()
+
+
+# =========================================================
+# SENSOR BOARD -> UART
+# =========================================================
  
- 
+async def listen_for_notes():
+    global last_note
+    while True:
+        data = uart_sensors.read(2)
+        if data and len(data) == 2 and data[0] == CMD_PLAY_NOTE:
+            last_note = data[1]
+            print("Note received from sensor board:", last_note)
+            await broadcast_state()
+        await asyncio.sleep_ms(5)
+
 # =========================================================
 # LOCAL LED INDICATOR
 # =========================================================
@@ -199,6 +216,31 @@ def connect_wifi():
     print("\nFailed to connect to WiFi")
     return None
  
+
+# =========================================================
+# SERVER CLIENTS
+# =========================================================
+
+def build_state():
+    return {
+        "volume": current_volume,
+        "instrument": INSTRUMENT_NAMES[current_instrument],
+        "instrument_index": current_instrument,
+        "gate_open": sound_open,
+        "realism": realism_enabled,
+        "last_note": last_note,
+    }
+
+async def broadcast_state():
+    message = json.dumps(build_state())
+    disconnected = set()
+    for client in connected_clients:
+        try:
+            await client.send(message)
+        except Exception:
+            disconnected.add(client)
+    for client in disconnected:
+        connected_clients.discard(client)
  
 # =========================================================
 # WEBSOCKET
@@ -208,38 +250,38 @@ def connect_wifi():
 @with_websocket
 async def websocket_handler(request, ws):
     print("Client connected")
- 
+    connected_clients.add(ws)
     push_volume_to_audio()
- 
+    await ws.send(json.dumps(build_state()))
     while True:
         message = await ws.receive()
  
         try:
-            data = json.loads(message)
-        except ValueError:
-            print("Not valid JSON, ignoring:", message)
-            continue
- 
-        if "volume" in data and data["volume"] is not None:
-            set_volume(data["volume"])
- 
-        if "instrument" in data and data["instrument"] is not None:
-            set_instrument(data["instrument"])
- 
-        if "note" in data and data["note"] is not None:
-            play_note(data["note"])
- 
-        if "realism" in data and data["realism"] is not None:
-            change_realism(data["realism"])
- 
-        response = {
-            "volume": current_volume,
-            "instrument": INSTRUMENT_NAMES[current_instrument],
-            "instrument_index": current_instrument,
-            "gate_open": sound_open,
-            "realism": realism_enabled,
-        }
-        await ws.send(json.dumps(response))
+            while True:
+                message = await ws.receive()
+    
+                try:
+                    data = json.loads(message)
+                except ValueError:
+                    print("Not valid JSON, ignoring:", message)
+                    continue
+    
+                if "volume" in data and data["volume"] is not None:
+                    set_volume(data["volume"])
+    
+                if "instrument" in data and data["instrument"] is not None:
+                    set_instrument(data["instrument"])
+    
+                if "note" in data and data["note"] is not None:
+                    play_note(data["note"])
+    
+                if "realism" in data and data["realism"] is not None:
+                    change_realism(data["realism"])
+    
+                await broadcast_state()   # tell everyone, not just this sender
+        finally:
+            connected_clients.discard(ws)   # <-- was missing; dead tabs never got cleaned up
+            print("Client disconnected")
  
  
 # =========================================================
@@ -256,6 +298,7 @@ async def main():
     print(f"UART{UART_ID} TX on GP{UART_TX} -> sound board GP5")
  
     asyncio.create_task(check_for_sound())
+    asyncio.create_task(listen_for_notes())
     await app.start_server(port=8765)
  
  

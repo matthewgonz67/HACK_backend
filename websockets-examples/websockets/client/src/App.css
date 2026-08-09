@@ -63,3 +63,28 @@
   border-radius: 8px;
   border: none;
 }
+
+.realism-button {
+  border: none;
+  color: white;
+  padding: 16px 32px;
+  text-align: center;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 16px;
+  margin: 4px 2px;
+  transition-duration: 0.4s;
+  cursor: pointer;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+.realism-button:hover {
+  background-color: #7c4dff;
+  transform: translateY(-2px); /* Moves up slightly */
+}
+
+/* Active state: pressed down */
+.realism-button:active {
+  transform: scale(0.95) translateY(0); /* Shrinks slightly on click */
+}

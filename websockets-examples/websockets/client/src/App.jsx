@@ -8,6 +8,7 @@ const PICO_IP = '192.168.0.123'
 function App() {
   const wsRef = useRef(null)
   const [volume, setVolume] = useState("0")
+  const [realism, setRealism] = useState(true)
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -51,6 +52,16 @@ function App() {
     setVolume(newVolume)
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ volume: Number(newVolume) }))
+    } else {
+      console.error('WebSocket is not open')
+    }
+  }
+
+  const sendRealism = () => {
+    const newRealism = !realism
+    setRealism(newRealism)
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ realism: Boolean(newRealism) }))
     } else {
       console.error('WebSocket is not open')
     }
@@ -124,6 +135,7 @@ function App() {
         <h1 className="gpio-heading">Pico Control</h1>
         <input type="range" min="0" max="100" value={volume} onChange={(e) => sendVolume(e.target.value)} />
         <p className="gpio-status">Volume: {volume}</p>
+        <button className="realism-button" onClick={() => sendRealism()}>Realism: {realism?"Enabled":"Disabled"}</button>
       </div>
     </div>
   )

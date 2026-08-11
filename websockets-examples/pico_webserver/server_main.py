@@ -80,15 +80,6 @@ def set_instrument(index):
 
  
 def play_note(midi_note):
-    """
-    MIDI note number. 60 is middle C. The sound board clamps to 21-108.
- 
-    Not gated directly - it doesn't need to be. When realism is on and
-    the mic is closed, push_volume_to_audio() has already told the
-    audio board its mixer level is 0, so any note played is silent
-    until the gate opens. One source of truth (volume) instead of
-    gating every command separately.
-    """
     send_command(CMD_PLAY_NOTE, int(midi_note))
  
  

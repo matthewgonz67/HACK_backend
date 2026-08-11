@@ -88,3 +88,40 @@
 .realism-button:active {
   transform: scale(0.95) translateY(0); /* Shrinks slightly on click */
 }
+
+.note-history {
+  margin-top: 40px;
+  padding-bottom: 40px;
+}
+
+.note-history-list {
+  list-style: none;
+  padding: 0;
+  max-width: 400px;
+  margin: 0 auto;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.note-history-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.note-history-name {
+  font-weight: bold;
+}
+
+.note-history-time {
+  opacity: 0.6;
+  font-size: 0.9em;
+}
+
+.personal-pictures {
+  width: 200px;
+  height: 200px;
+  overflow: hidden;
+  position: relative;
+}

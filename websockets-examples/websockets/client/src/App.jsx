@@ -3,7 +3,9 @@ import './App.css'
 
 // Replace with your Pico 2 W's IP address (printed to the serial console
 // when it connects to WiFi, e.g. "192.168.1.42")
-const PICO_IP = '192.168.0.123'
+const PICO_IP = '192.168.50.113'
+//192.168.50.113
+//192.168.0.123
 
 function App() {
   const wsRef = useRef(null)
@@ -12,8 +14,16 @@ function App() {
   const [volume, setVolume] = useState("0")
   const [realism, setRealism] = useState(true)
   const [gateOpen, setGateOpen] = useState(false)
+  const [playing, setPlaying] = useState(false)
   const [instrument, setInstrument] = useState("Trumpet")
   const [lastNote, setLastNote] = useState(null)
+  const [noteHistory, setNoteHistory] = useState([])
+  const lastNoteRef = useRef(null)     // tracks previous note so we only log actual changes
+  const instrumentRef = useRef("Trumpet")   // onmessage is defined once (empty deps
+                                              // below), so reading `instrument` state
+                                              // directly inside it would always see the
+                                              // initial value, not the latest - this ref
+                                              // is what history entries actually read
 
   const INSTRUMENT_COLORS = {
     Trumpet: "#f4a300",
@@ -34,7 +44,7 @@ function App() {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    // Connect to WebSocket server running on the Pico
+    //connect to websocket server running on the Pico
     wsRef.current = new WebSocket(`ws://${PICO_IP}:8765/ws`)
 
     wsRef.current.onopen = () => {
@@ -59,11 +69,31 @@ function App() {
         if (typeof data.gate_open === "boolean") {
           setGateOpen(data.gate_open)
         }
+        if (typeof data.playing === "boolean") {
+          setPlaying(data.playing)
+        }
         if (typeof data.instrument === "string") {
           setInstrument(data.instrument)
+          instrumentRef.current = data.instrument
         }
         if (data.last_note !== undefined) {
           setLastNote(data.last_note)
+
+          // broadcast_state() fires on volume/gate/realism changes too,
+          // each carrying whatever last_note currently is - only log
+          // an entry when the note itself actually changed.
+          if (data.last_note !== null && data.last_note !== lastNoteRef.current) {
+            lastNoteRef.current = data.last_note
+            setNoteHistory(prev => [
+              ...prev,
+              {
+                note: data.last_note,
+                name: midiToName(data.last_note),
+                instrument: instrumentRef.current,
+                time: new Date().toLocaleTimeString(),
+              },
+            ])
+          }
         }
       } catch (e) {
         console.error('Error parsing message:', e)
@@ -105,8 +135,8 @@ function App() {
     pendingVolumeRef.current = newVolume
 
     if (volumeThrottleRef.current) return  // a send is already scheduled
-
-    volumeThrottleRef.current = setTimeout(() => {
+    //incldue a delay so the slider isn't super laggy when syncing with other clients
+    volumeThrottleRef.current = setTimeout(() => { 
       volumeThrottleRef.current = null
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ volume: Number(pendingVolumeRef.current) }))
@@ -139,24 +169,24 @@ function App() {
           </div>
         <div className = "intro-container">
           <div className = "intro-entry">
-            <img src = "/name_pic.png" alt = "Name Picture" className="personal-pictures"></img>
+            <img src = "/matthew_pic.jpg" alt = "Name Picture" className="personal-pictures"></img>
             <h3>Matthew Gonzalez</h3>
-            <p>Introduction</p>
+            <p>Hello there! My name is Matthew Gonzalez and I'm an incoming computer engineering transfer at UCLA. In my free time I like to grapple or hike, especially longer trails. Aside from academics, I'm especially excited to join UCLA's wrestling club.</p>
           </div>
           <div className = "intro-entry">
-            <img src = "/name_pic.png" alt = "Name Picture" className="personal-pictures"></img>
+            <img src = "/andy_pic.jpg" alt = "Name Picture" className="personal-pictures"></img>
             <h3>Andy Viche</h3>
-            <p>Introduction</p>
+            <p>Hi, my name is Andy. I am an electrical engineer transferring from Los Angeles City College. I like reading and playing video games. I'm excited to eat at the dining halls and I'm planning on tasting all of them.</p>
           </div>
           <div className = "intro-entry">
-            <img src = "/name_pic.png" alt = "Name Picture" className="personal-pictures"></img>
+            <img src = "/teppei_pic.jpg" alt = "Name Picture" className="personal-pictures"></img>
             <h3>Teppei Yoshikawa</h3>
-            <p>Introduction</p>
+            <p>Hi I’m Teppei, transferring to Aerospace engineering. I like to read when I have free time. I'm excited for the club activity at UCLA and plan on joining Rocket Project at UCLA.</p>
           </div>
           <div className = "intro-entry">
-            <img src = "/name_pic.png" alt = "Name Picture" className="personal-pictures"></img>
+            <img src = "/sean_pic.png" alt = "Name Picture" className="personal-pictures"></img>
             <h3>Sean Stokowski</h3>
-            <p>Introduction</p>
+            <p>Hi, my name is Sean, and I'm a mechanical engineering major. I transferred from Contra Costa College, and in my free time, I like to play baseball, basketball, and ultimate frisbee. I also play musical instruments such as the trumpet and baritone.</p>
           </div>
         </div>
       </div>
@@ -205,20 +235,36 @@ function App() {
             borderRadius: "50%",
             margin: "30px auto",
             backgroundColor: INSTRUMENT_COLORS[instrument] || "#888",
-            opacity: gateOpen ? 1 : 0.25,
+            opacity: playing ? 1 : 0.25,
             border: realism ? "4px solid white" : "4px dashed white",
-            boxShadow: gateOpen
+            boxShadow: playing
               ? `0 0 ${20 + Number(volume)}px ${INSTRUMENT_COLORS[instrument] || "#888"}`
               : "none",
             transition: "all 120ms ease-out",
           }}
         />
         <p className="gpio-status">
-          {gateOpen ? `Playing ${instrument}` : "Silent"}
+          Instrument: {instrument}
         </p>
         <p className="gpio-status">
           Note: {midiToName(lastNote)}
         </p>
+      </div>
+
+      <div className="note-history">
+        <h1 className="video-heading">Notes Played</h1>
+        {noteHistory.length === 0 ? (
+          <p className="gpio-status">No notes played yet</p>
+        ) : (
+          <ul className="note-history-list">
+            {noteHistory.map((entry, index) => (
+              <li key={index}>
+                <span className="note-history-name">{entry.instrument}: {entry.name}</span>
+                <span className="note-history-time">{entry.time}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )
